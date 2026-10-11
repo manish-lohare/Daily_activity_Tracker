@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Daylight (debug)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://lavsenhehwuoruphkxuz.supabase.co",
+        "--dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_EKHUX4BNqGjqcLsVyK9jLA_MpuyHc5R"
+      ]
+    },
+    {
+      "name": "Daylight (release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "args": [
+        "--dart-define=SUPABASE_URL=https://lavsenhehwuoruphkxuz.supabase.co",
+        "--dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_EKHUX4BNqGjqcLsVyK9jLA_MpuyHc5R"
+      ]
+    }
+  ]
+}
+
