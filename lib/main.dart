@@ -32,16 +32,39 @@ const standardCategories = <TrackerCategory>[
 ];
 
 const categoryColors = <int>[
-  0xFFFF625F,
-  0xFFFF9D3D,
-  0xFFFFD166,
-  0xFFDFFF4B,
-  0xFF61E66F,
-  0xFF28D9B2,
-  0xFF2ACBFF,
-  0xFF776CFF,
-  0xFFBE7AFF,
+  // Reds & Pinks
+  0xFFFF5C5C,
+  0xFFFF4081,
   0xFFFF5C9C,
+  0xFFE91E63,
+  // Oranges & Ambers
+  0xFFFF6E40,
+  0xFFFF9D3D,
+  0xFFFFAC4A,
+  0xFFFFD166,
+  // Yellows & Limes
+  0xFFFFEE58,
+  0xFFDFFF4B,
+  0xFFAEEA00,
+  // Greens & Teals
+  0xFF61E66F,
+  0xFF00E676,
+  0xFF28D9B2,
+  0xFF00BFA5,
+  // Cyans & Blues
+  0xFF2ACBFF,
+  0xFF00B0FF,
+  0xFF2979FF,
+  0xFF448AFF,
+  // Purples & Violets
+  0xFF776CFF,
+  0xFF651FFF,
+  0xFFBE7AFF,
+  0xFFD500F9,
+  // Browns, Slates & Neutrals
+  0xFF8D6E63,
+  0xFF78909C,
+  0xFF8C96B5,
 ];
 
 class TrackerCategory {
@@ -89,16 +112,13 @@ class ActivityEntry {
 
   int get minutes => end - start;
 
-  ActivityEntry carryToToday(int endMinute) => ActivityEntry(
-        id: 'copy-$id',
-        title: title,
-        start: start,
-        end: endMinute,
-        category: category,
-        note: note,
-        carried: true,
-        sourceId: id,
-      );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ActivityEntry && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -777,7 +797,6 @@ class _TrackerHomeState extends State<TrackerHome> {
     super.initState();
     selectedDay = _dateOnly(DateTime.now());
     _load();
-    timer = Timer.periodic(const Duration(minutes: 1), (_) => _carryForward());
   }
 
   @override
@@ -794,10 +813,13 @@ class _TrackerHomeState extends State<TrackerHome> {
     } catch (_) {
       // The timeline remains available locally until the Supabase schema exists.
     }
+    // Clean up any legacy auto-copied activities that were previously carried forward
+    for (final dayActivities in result.records.values) {
+      dayActivities.removeWhere((item) => item.carried);
+    }
     await result.save();
     if (!mounted) return;
     setState(() => store = result);
-    await _carryForward();
   }
 
   List<ActivityEntry> get _activities {
@@ -842,44 +864,6 @@ class _TrackerHomeState extends State<TrackerHome> {
     await Backend.syncStore(store!);
   }
 
-  Future<void> _carryForward() async {
-    if (store == null) return;
-    final now = DateTime.now();
-    final today = _dateOnly(now);
-    final elapsedMinute = now.hour * 60 + now.minute;
-    final yesterday = today.subtract(const Duration(days: 1));
-    final previous = List<ActivityEntry>.from(store!.activitiesFor(yesterday));
-    final todayActivities = store!.activitiesFor(today);
-    var changed = false;
-
-    for (final oldActivity in previous) {
-      final copiedEnd = oldActivity.end < elapsedMinute ? oldActivity.end : elapsedMinute;
-      if (copiedEnd <= oldActivity.start) continue;
-      final found = todayActivities.where(
-        (item) => item.carried && item.sourceId == oldActivity.id,
-      );
-      final existing = found.isEmpty ? null : found.first;
-      final userLoggedOverIt = todayActivities.any(
-        (item) =>
-            !item.carried &&
-            item.start < copiedEnd &&
-            item.end > oldActivity.start,
-      );
-      if (userLoggedOverIt) continue;
-
-      if (existing == null) {
-        todayActivities.add(oldActivity.carryToToday(copiedEnd));
-        changed = true;
-      } else if (existing.end < copiedEnd) {
-        existing.end = copiedEnd;
-        changed = true;
-      }
-    }
-    if (!changed) return;
-    todayActivities.sort((a, b) => a.start.compareTo(b.start));
-    await _save();
-    if (mounted && _isToday) setState(() {});
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1089,30 +1073,58 @@ class _TrackerHomeState extends State<TrackerHome> {
   Widget _weekPicker() {
     final start = selectedDay.subtract(Duration(days: selectedDay.weekday - 1));
     const initials = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    return Row(children: List.generate(7, (index) {
-      final date = start.add(Duration(days: index));
-      final active = _dayKey(date) == _dayKey(selectedDay);
-      final isToday = _dayKey(date) == _dayKey(DateTime.now());
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => setState(() => selectedDay = _dateOnly(date)),
-          child: Container(
-            margin: EdgeInsets.only(right: index == 6 ? 0 : 5),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: active ? accent : surface,
-              borderRadius: BorderRadius.circular(14),
-              border: isToday && !active ? Border.all(color: accent) : null,
-            ),
-            child: Column(children: [
-              Text(initials[index], style: TextStyle(fontSize: 10, color: active ? Colors.black54 : mutedText)),
-              const SizedBox(height: 4),
-              Text('${date.day}', style: TextStyle(fontWeight: FontWeight.w900, color: active ? Colors.black : primaryText)),
-            ]),
-          ),
+    return Row(children: [
+      InkWell(
+        onTap: () => setState(() => selectedDay = _dateOnly(selectedDay.subtract(const Duration(days: 7)))),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(10)),
+          child: const Icon(Icons.chevron_left_rounded, size: 18, color: mutedText),
         ),
-      );
-    }));
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Row(children: List.generate(7, (index) {
+          final date = start.add(Duration(days: index));
+          final active = _dayKey(date) == _dayKey(selectedDay);
+          final isToday = _dayKey(date) == _dayKey(DateTime.now());
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => selectedDay = _dateOnly(date)),
+              child: Container(
+                margin: EdgeInsets.only(right: index == 6 ? 0 : 5),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: active ? accent : surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: isToday && !active ? Border.all(color: accent) : null,
+                ),
+                child: Column(children: [
+                  Text(initials[index], style: TextStyle(fontSize: 10, color: active ? Colors.black54 : mutedText)),
+                  const SizedBox(height: 4),
+                  Text('${date.day}', style: TextStyle(fontWeight: FontWeight.w900, color: active ? Colors.black : primaryText)),
+                ]),
+              ),
+            ),
+          );
+        })),
+      ),
+      const SizedBox(width: 6),
+      InkWell(
+        onTap: () {
+          final nextWeek = selectedDay.add(const Duration(days: 7));
+          final today = _dateOnly(DateTime.now());
+          setState(() => selectedDay = nextWeek.isAfter(today) ? today : _dateOnly(nextWeek));
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(10)),
+          child: const Icon(Icons.chevron_right_rounded, size: 18, color: mutedText),
+        ),
+      ),
+    ]);
   }
 
   Widget _progressCard(int tracked) {
@@ -1172,16 +1184,25 @@ class _TrackerHomeState extends State<TrackerHome> {
               if (entries.isEmpty) Container(width: 1, height: 36, color: const Color(0xFF353950)),
             ])),
             const SizedBox(width: 8),
-            Expanded(child: entries.isEmpty ? _openTime() : Column(children: entries.map((item) => _activityCard(item, start, end)).toList())),
+            Expanded(child: entries.isEmpty ? _openTime(start) : Column(children: entries.map((item) => _activityCard(item, start, end)).toList())),
           ]);
         })),
       );
 
-  Widget _openTime() => Container(
-        height: 50,
-        alignment: Alignment.centerLeft,
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF1D2034)))),
-        child: const Text('open time', style: TextStyle(fontSize: 12, color: Color(0xFF62687E))),
+  Widget _openTime(int hourStart) => InkWell(
+        onTap: () => _editActivity(null, hourStart),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.centerLeft,
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF1D2034)))),
+          child: Row(children: [
+            const Text('open time', style: TextStyle(fontSize: 12, color: Color(0xFF62687E))),
+            const Spacer(),
+            Icon(Icons.add_circle_outline_rounded, size: 16, color: accent.withValues(alpha: .5)),
+          ]),
+        ),
       );
 
   Widget _activityCard(ActivityEntry item, int hourStart, int hourEnd) {
@@ -1257,13 +1278,13 @@ class _TrackerHomeState extends State<TrackerHome> {
         ]),
       );
 
-  Future<void> _editActivity([ActivityEntry? existing]) async {
+  Future<void> _editActivity([ActivityEntry? existing, int? defaultStart]) async {
     final title = TextEditingController(text: existing?.title ?? '');
     final notes = TextEditingController(text: existing?.note ?? '');
-    var start = existing?.start ?? _nowRounded();
+    var start = existing?.start ?? defaultStart ?? (_isToday ? _nowRounded() : 9 * 60);
     var end = existing?.end ?? (start + 60).clamp(0, 1440).toInt();
     var category = existing?.category ?? store!.categories.first.name;
-    final result = await showModalBottomSheet<ActivityEntry>(
+    final result = await showModalBottomSheet<dynamic>(
       context: context,
       isScrollControlled: true,
       builder: (context) => StatefulBuilder(
@@ -1272,11 +1293,46 @@ class _TrackerHomeState extends State<TrackerHome> {
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(child: _handle()),
             const SizedBox(height: 20),
-            Text(existing == null ? 'Log your time' : 'Edit activity', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+            Row(children: [
+              Expanded(
+                child: Text(
+                  existing == null ? 'Log your time' : 'Edit activity',
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+                ),
+              ),
+              if (existing != null)
+                IconButton(
+                  tooltip: 'Delete activity',
+                  icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF5C5C)),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete this activity?'),
+                        content: Text('Remove “${existing.title}” from this day?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF5C5C)),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && context.mounted) {
+                      Navigator.pop(context, 'delete');
+                    }
+                  },
+                ),
+            ]),
             const SizedBox(height: 7),
-            const Text('A clear record beats a perfect one.', style: TextStyle(color: mutedText)),
+            Text(
+              _isToday ? 'A clear record beats a perfect one.' : 'Editing activity for ${_friendlyDate(selectedDay)}.',
+              style: const TextStyle(color: mutedText),
+            ),
             const SizedBox(height: 19),
-            TextField(controller: title, autofocus: true, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'What did you do?')),
+            TextField(controller: title, autofocus: existing == null, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'What did you do?')),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: _timePicker('Start', start, (value) => change(() => start = value))),
@@ -1310,15 +1366,28 @@ class _TrackerHomeState extends State<TrackerHome> {
     );
     if (result == null) return;
     final activities = store!.activitiesFor(selectedDay);
-    setState(() {
-      if (existing == null) {
-        activities.add(result);
-      } else {
-        activities[activities.indexOf(existing)] = result;
-      }
-      activities.sort((a, b) => a.start.compareTo(b.start));
-    });
-    await _save();
+    if (result == 'delete' && existing != null) {
+      setState(() => activities.removeWhere((item) => item.id == existing.id));
+      await _save();
+      await Backend.deleteActivity(existing.id);
+      return;
+    }
+    if (result is ActivityEntry) {
+      setState(() {
+        if (existing == null) {
+          activities.add(result);
+        } else {
+          final idx = activities.indexWhere((item) => item.id == existing.id);
+          if (idx != -1) {
+            activities[idx] = result;
+          } else {
+            activities.add(result);
+          }
+        }
+        activities.sort((a, b) => a.start.compareTo(b.start));
+      });
+      await _save();
+    }
   }
 
   Widget _timePicker(String label, int value, ValueChanged<int> onChanged) => OutlinedButton(
@@ -1334,10 +1403,10 @@ class _TrackerHomeState extends State<TrackerHome> {
     final answer = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
       title: const Text('Delete this activity?'),
       content: Text('Remove “${item.title}” from this day?'),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF5C5C)), onPressed: () => Navigator.pop(context, true), child: const Text('Delete'))],
     ));
     if (answer != true) return;
-    setState(() => _activities.remove(item));
+    setState(() => store!.activitiesFor(selectedDay).removeWhere((e) => e.id == item.id));
     await _save();
     await Backend.deleteActivity(item.id);
   }
@@ -1358,21 +1427,61 @@ class _TrackerHomeState extends State<TrackerHome> {
             const SizedBox(height: 18),
             TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Category name')),
             const SizedBox(height: 17),
-            const Text('Choose a colour', style: TextStyle(color: mutedText)),
-            const SizedBox(height: 10),
-            Wrap(spacing: 11, runSpacing: 11, children: categoryColors.map((value) => GestureDetector(
-              onTap: () => change(() => color = value),
-              child: Container(width: 36, height: 36, decoration: BoxDecoration(color: Color(value), shape: BoxShape.circle, border: value == color ? Border.all(color: Colors.white, width: 3) : null), child: value == color ? const Icon(Icons.check, color: Colors.black, size: 20) : null),
-            )).toList()),
+            Row(children: [
+              const Text('Choose a colour', style: TextStyle(color: mutedText)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Color(color).withValues(alpha: .2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Color(color)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 12, height: 12, decoration: BoxDecoration(color: Color(color), shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '#${(color & 0x00FFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(color)),
+                  ),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: surfaceLight,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF353950)),
+              ),
+              child: SingleChildScrollView(
+                child: Wrap(spacing: 10, runSpacing: 10, children: categoryColors.map((value) => GestureDetector(
+                  onTap: () => change(() => color = value),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Color(value),
+                      shape: BoxShape.circle,
+                      border: value == color ? Border.all(color: Colors.white, width: 3) : null,
+                      boxShadow: value == color ? [BoxShadow(color: Color(value).withValues(alpha: .6), blurRadius: 8)] : null,
+                    ),
+                    child: value == color ? const Icon(Icons.check, color: Colors.black, size: 20) : null,
+                  ),
+                )).toList()),
+              ),
+            ),
             const SizedBox(height: 22),
             SizedBox(width: double.infinity, child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.black),
+              style: FilledButton.styleFrom(backgroundColor: Color(color), foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16)),
               onPressed: () {
                 final text = name.text.trim();
                 if (text.isEmpty || store!.categories.any((item) => item.name.toLowerCase() == text.toLowerCase())) return;
                 Navigator.pop(context, TrackerCategory(text, color, Icons.label_rounded));
               },
-              child: const Text('Add category'),
+              child: const Text('Add category', style: TextStyle(fontWeight: FontWeight.w900)),
             )),
           ]),
         ),
