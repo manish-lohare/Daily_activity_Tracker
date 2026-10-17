@@ -4,10 +4,20 @@ A modern, minimalist daily time tracking Flutter application designed to help yo
 
 ---
 
+### 🌐 Live Web App
+👉 **[Open Daylight on the Web](https://manish-lohare.github.io/Daily_activity_Tracker/)**  
+*(Works in any desktop or mobile browser — can also be installed as a PWA!)*
+
+### 📱 Android APK Download
+👉 **[Download daylight-v1.0.apk (52.2 MB)](./release/daylight-v1.0.apk)**
+
+---
+
 ## 📱 Features
 
 - **Real-Time Visual Timeline:** Log and view every activity across a 24-hour day with color-coded categories.
-- **Auto-Carry Forward:** Automatically carries ongoing routines (like sleep) across midnight.
+- **Previous Days History & Editing:** Seamlessly browse past weeks with chevron controls, edit past entries, or log retroactively.
+- **26 Vibrant Category Colors:** Customize categories with an extensive color palette and live hex preview.
 - **Smart Goals & Streaks:** Set daily, weekly, or custom day goals with streak tracking and freeze protection.
 - **Insights & Analytics:** Live percentage breakdown of your tracked time, weekly summaries, and category trends.
 - **Profile & Auth:** Seamless authentication with first name, last name, email, and alphanumeric password requirements.
